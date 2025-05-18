@@ -18,6 +18,7 @@
 #include <node/connection_types.h>
 #include <qt/bantablemodel.h>
 #include <qt/clientmodel.h>
+#include <qt/guiutil.h>
 #include <qt/peertablesortproxy.h>
 #include <qt/walletmodel.h>
 #include <rpc/client.h>
@@ -862,6 +863,12 @@ void RPCConsole::removeWallet(WalletModel * const walletModel)
         ui->wallet_path->clear();
     }
 }
+
+void RPCConsole::setCurrentWallet(WalletModel* const wallet_model)
+{
+    QVariant data = QVariant::fromValue(wallet_model);
+    ui->WalletSelector->setCurrentIndex(ui->WalletSelector->findData(data));
+}
 #endif
 
 static QString categoryClass(int category)
@@ -1005,8 +1012,7 @@ void RPCConsole::clear(bool keep_prompt)
 
 void RPCConsole::keyPressEvent(QKeyEvent *event)
 {
-    if(windowType() != Qt::Widget && event->key() == Qt::Key_Escape)
-    {
+    if (windowType() != Qt::Widget && GUIUtil::IsEscapeOrBack(event->key())) {
         close();
     }
 }

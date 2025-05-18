@@ -146,7 +146,7 @@ void CActiveMasternodeManager::InitInternal(const CBlockIndex* pindex)
 
     LogPrintf("CActiveMasternodeManager::Init -- proTxHash=%s, proTx=%s\n", dmn->proTxHash.ToString(), dmn->ToString());
 
-    if (m_info.service != dmn->pdmnState->addr) {
+    if (m_info.service != dmn->pdmnState->netInfo.GetPrimary()) {
         m_state = MasternodeState::SOME_ERROR;
         m_error = "Local address does not match the address from ProTx";
         LogPrintf("CActiveMasternodeManager::Init -- ERROR: %s\n", m_error);
@@ -155,16 +155,9 @@ void CActiveMasternodeManager::InitInternal(const CBlockIndex* pindex)
 
     // Check socket connectivity
     LogPrintf("CActiveMasternodeManager::Init -- Checking inbound connection to '%s'\n", m_info.service.ToStringAddrPort());
-    std::unique_ptr<Sock> sock = CreateSock(m_info.service);
-    if (!sock) {
-        m_state = MasternodeState::SOME_ERROR;
-        m_error = "Could not create socket to connect to " + m_info.service.ToStringAddrPort();
-        LogPrintf("CActiveMasternodeManager::Init -- ERROR: %s\n", m_error);
-        return;
-    }
-    bool fConnected = ConnectSocketDirectly(m_info.service, *sock, nConnectTimeout, true) && sock->IsSelectable();
+    std::unique_ptr<Sock> sock{ConnectDirectly(m_info.service, /*manual_connection=*/true)};
+    bool fConnected{sock && sock->IsSelectable()};
     sock = std::make_unique<Sock>(INVALID_SOCKET);
-
     if (!fConnected && Params().RequireRoutableExternalIP()) {
         m_state = MasternodeState::SOME_ERROR;
         m_error = "Could not connect to " + m_info.service.ToStringAddrPort();
@@ -208,7 +201,7 @@ void CActiveMasternodeManager::UpdatedBlockTip(const CBlockIndex* pindexNew, con
             // MN operator key changed or revoked
             return reset(MasternodeState::OPERATOR_KEY_CHANGED);
         }
-        if (newDmn->pdmnState->addr != oldDmn->pdmnState->addr) {
+        if (newDmn->pdmnState->netInfo.GetPrimary() != oldDmn->pdmnState->netInfo.GetPrimary()) {
             // MN IP changed
             return reset(MasternodeState::PROTX_IP_CHANGED);
         }

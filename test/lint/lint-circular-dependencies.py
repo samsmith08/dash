@@ -22,10 +22,6 @@ EXPECTED_CIRCULAR_DEPENDENCIES = (
     "wallet/fees -> wallet/wallet -> wallet/fees",
     "wallet/wallet -> wallet/walletdb -> wallet/wallet",
     "node/coinstats -> validation -> node/coinstats",
-    # Temporary circular dependencies that allow wallet.h/wallet.cpp to be
-    # split up in a MOVEONLY commit. These are removed in #21206.
-    "wallet/receive -> wallet/wallet -> wallet/receive",
-    "wallet/spend -> wallet/wallet -> wallet/spend",
     # Dash
     "banman -> common/bloom -> evo/assetlocktx -> llmq/quorums -> net -> banman",
     "banman -> common/bloom -> evo/assetlocktx -> llmq/signing -> net_processing -> banman",
@@ -36,19 +32,24 @@ EXPECTED_CIRCULAR_DEPENDENCIES = (
     "coinjoin/server -> net_processing -> coinjoin/server",
     "common/bloom -> evo/assetlocktx -> llmq/quorums -> net -> common/bloom",
     "common/bloom -> evo/assetlocktx -> llmq/signing -> net_processing -> merkleblock -> common/bloom",
-    "consensus/tx_verify -> evo/assetlocktx -> validation -> consensus/tx_verify",
-    "consensus/tx_verify -> evo/assetlocktx -> validation -> txmempool -> consensus/tx_verify",
+    "consensus/tx_verify -> evo/assetlocktx -> llmq/commitment -> validation -> consensus/tx_verify",
+    "consensus/tx_verify -> evo/assetlocktx -> llmq/signing -> net_processing -> txmempool -> consensus/tx_verify",
     "core_io -> evo/cbtx -> evo/simplifiedmns -> core_io",
     "dsnotificationinterface -> llmq/chainlocks -> node/blockstorage -> dsnotificationinterface",
-    "evo/assetlocktx -> validation -> txmempool -> evo/assetlocktx",
+    "evo/assetlocktx -> llmq/signing -> net_processing -> txmempool -> evo/assetlocktx",
     "evo/cbtx -> evo/simplifiedmns -> evo/cbtx",
+    "evo/chainhelper -> evo/specialtxman -> evo/deterministicmns -> evo/chainhelper",
     "evo/chainhelper -> evo/specialtxman -> validation -> evo/chainhelper",
+    "evo/chainhelper -> llmq/chainlocks -> evo/chainhelper",
+    "evo/chainhelper -> llmq/instantsend -> evo/chainhelper",
+    "evo/chainhelper -> masternode/payments -> governance/classes -> governance/object -> evo/chainhelper",
+    "evo/chainhelper -> node/transaction -> node/context -> evo/chainhelper",
     "evo/deterministicmns -> llmq/commitment -> evo/deterministicmns",
+    "evo/deterministicmns -> llmq/commitment -> validation -> evo/deterministicmns",
+    "evo/deterministicmns -> llmq/commitment -> validation -> txmempool -> evo/deterministicmns",
     "evo/deterministicmns -> llmq/utils -> evo/deterministicmns",
     "evo/deterministicmns -> llmq/utils -> llmq/snapshot -> evo/simplifiedmns -> evo/deterministicmns",
     "evo/deterministicmns -> llmq/utils -> net -> evo/deterministicmns",
-    "evo/deterministicmns -> validation -> evo/deterministicmns",
-    "evo/deterministicmns -> validation -> txmempool -> evo/deterministicmns",
     "evo/deterministicmns -> validationinterface -> evo/deterministicmns",
     "evo/deterministicmns -> validationinterface -> governance/vote -> evo/deterministicmns",
     "evo/mnhftx -> validation -> evo/mnhftx",
@@ -88,6 +89,7 @@ EXPECTED_CIRCULAR_DEPENDENCIES = (
     "qt/guiutil -> qt/optionsdialog -> qt/guiutil",
     "qt/guiutil -> qt/optionsdialog -> qt/optionsmodel -> qt/guiutil",
     "qt/guiutil -> qt/qvalidatedlineedit -> qt/guiutil",
+    "wallet/coinjoin -> wallet/receive -> wallet/coinjoin",
 )
 
 CODE_DIR = "src"

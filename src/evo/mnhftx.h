@@ -49,9 +49,7 @@ public:
 
     [[nodiscard]] UniValue ToJson() const
     {
-        UniValue obj;
-        obj.clear();
-        obj.setObject();
+        UniValue obj(UniValue::VOBJ);
         obj.pushKV("versionBit", (int)versionBit);
         obj.pushKV("quorumHash", quorumHash.ToString());
         obj.pushKV("sig", sig.ToString());
@@ -86,14 +84,7 @@ public:
 
     std::string ToString() const;
 
-    [[nodiscard]] UniValue ToJson() const
-    {
-        UniValue obj;
-        obj.setObject();
-        obj.pushKV("version", (int)nVersion);
-        obj.pushKV("signal", signal.ToJson());
-        return obj;
-    }
+    [[nodiscard]] UniValue ToJson() const;
 };
 
 class CMNHFManager : public AbstractEHFManager

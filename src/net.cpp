@@ -415,12 +415,10 @@ static CAddress GetBindAddress(const Sock& sock)
     CAddress addr_bind;
     struct sockaddr_storage sockaddr_bind;
     socklen_t sockaddr_bind_len = sizeof(sockaddr_bind);
-    if (sock.Get() != INVALID_SOCKET) {
-        if (!sock.GetSockName((struct sockaddr*)&sockaddr_bind, &sockaddr_bind_len)) {
-            addr_bind.SetSockAddr((const struct sockaddr*)&sockaddr_bind);
-        } else {
-            LogPrintLevel(BCLog::NET, BCLog::Level::Warning, "getsockname failed\n");
-        }
+    if (!sock.GetSockName((struct sockaddr*)&sockaddr_bind, &sockaddr_bind_len)) {
+        addr_bind.SetSockAddr((const struct sockaddr*)&sockaddr_bind);
+    } else {
+        LogPrintLevel(BCLog::NET, BCLog::Level::Warning, "getsockname failed\n");
     }
     return addr_bind;
 }
@@ -484,7 +482,6 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
     }
 
     // Connect
-    bool connected = false;
     std::unique_ptr<Sock> sock;
     Proxy proxy;
     CAddress addr_bind;
@@ -497,6 +494,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
 
         if (addrConnect.IsI2P() && use_proxy) {
             i2p::Connection conn;
+            bool connected{false};
 
             if (m_i2p_sam_session) {
                 connected = m_i2p_sam_session->Connect(addrConnect, conn, proxyConnectionFailed);
@@ -505,7 +503,7 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
                     LOCK(m_unused_i2p_sessions_mutex);
                     if (m_unused_i2p_sessions.empty()) {
                         i2p_transient_session =
-                            std::make_unique<i2p::sam::Session>(proxy.proxy, &interruptNet);
+                            std::make_unique<i2p::sam::Session>(proxy, &interruptNet);
                     } else {
                         i2p_transient_session.swap(m_unused_i2p_sessions.front());
                         m_unused_i2p_sessions.pop();
@@ -525,19 +523,11 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
                 addr_bind = CAddress{conn.me, NODE_NONE};
             }
         } else if (use_proxy) {
-            sock = CreateSock(proxy.proxy);
-            if (!sock) {
-                return nullptr;
-            }
-            connected = ConnectThroughProxy(proxy, addrConnect.ToStringAddr(), addrConnect.GetPort(),
-                                            *sock, nConnectTimeout, proxyConnectionFailed);
+            LogPrintLevel(BCLog::PROXY, BCLog::Level::Debug, "Using proxy: %s to connect to %s:%s\n", proxy.ToString(), addrConnect.ToStringAddr(), addrConnect.GetPort());
+            sock = ConnectThroughProxy(proxy, addrConnect.ToStringAddr(), addrConnect.GetPort(), proxyConnectionFailed);
         } else {
             // no proxy needed (none set for target network)
-            sock = CreateSock(addrConnect);
-            if (!sock) {
-                return nullptr;
-            }
-            connected = ConnectSocketDirectly(addrConnect, *sock, nConnectTimeout, conn_type == ConnectionType::MANUAL);
+            sock = ConnectDirectly(addrConnect, conn_type == ConnectionType::MANUAL);
         }
         if (!proxyConnectionFailed) {
             // If a connection to the node was attempted, and failure (if any) is not caused by a problem connecting to
@@ -545,18 +535,13 @@ CNode* CConnman::ConnectNode(CAddress addrConnect, const char *pszDest, bool fCo
             addrman.Attempt(addrConnect, fCountFailure);
         }
     } else if (pszDest && GetNameProxy(proxy)) {
-        sock = CreateSock(proxy.proxy);
-        if (!sock) {
-            return nullptr;
-        }
         std::string host;
         uint16_t port{default_port};
         SplitHostPort(std::string(pszDest), port, host);
         bool proxyConnectionFailed;
-        connected = ConnectThroughProxy(proxy, host, port, *sock, nConnectTimeout,
-                                        proxyConnectionFailed);
+        sock = ConnectThroughProxy(proxy, host, port, proxyConnectionFailed);
     }
-    if (!connected) {
+    if (!sock) {
         return nullptr;
     }
 
@@ -3689,7 +3674,7 @@ void CConnman::ThreadOpenMasternodeConnections(CDeterministicMNManager& dmnman, 
                     if (!dmn) {
                         continue;
                     }
-                    const auto& addr2 = dmn->pdmnState->addr;
+                    const auto addr2 = dmn->pdmnState->netInfo.GetPrimary();
                     if (connectedNodes.count(addr2) && !connectedProRegTxHashes.count(proRegTxHash)) {
                         // we probably connected to it before it became a masternode
                         // or maybe we are still waiting for mnauth
@@ -3755,8 +3740,8 @@ void CConnman::ThreadOpenMasternodeConnections(CDeterministicMNManager& dmnman, 
             if (!vPendingMasternodes.empty()) {
                 auto dmn = mnList.GetValidMN(vPendingMasternodes.front());
                 vPendingMasternodes.erase(vPendingMasternodes.begin());
-                if (dmn && !connectedNodes.count(dmn->pdmnState->addr) && !IsMasternodeOrDisconnectRequested(dmn->pdmnState->addr)) {
-                    LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- opening pending masternode connection to %s, service=%s\n", _func_, dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringAddrPort());
+                if (dmn && !connectedNodes.count(dmn->pdmnState->netInfo.GetPrimary()) && !IsMasternodeOrDisconnectRequested(dmn->pdmnState->netInfo.GetPrimary())) {
+                    LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- opening pending masternode connection to %s, service=%s\n", _func_, dmn->proTxHash.ToString(), dmn->pdmnState->netInfo.GetPrimary().ToStringAddrPort());
                     return dmn;
                 }
             }
@@ -3765,7 +3750,7 @@ void CConnman::ThreadOpenMasternodeConnections(CDeterministicMNManager& dmnman, 
                 // not-null
                 auto dmn = pending[GetRand(pending.size())];
                 LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- opening quorum connection to %s, service=%s\n",
-                         _func_, dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringAddrPort());
+                         _func_, dmn->proTxHash.ToString(), dmn->pdmnState->netInfo.GetPrimary().ToStringAddrPort());
                 return dmn;
             }
 
@@ -3775,7 +3760,7 @@ void CConnman::ThreadOpenMasternodeConnections(CDeterministicMNManager& dmnman, 
                 masternodePendingProbes.erase(dmn->proTxHash);
                 isProbe = MasternodeProbeConn::IsConnection;
 
-                LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- probing masternode %s, service=%s\n", _func_, dmn->proTxHash.ToString(), dmn->pdmnState->addr.ToStringAddrPort());
+                LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- probing masternode %s, service=%s\n", _func_, dmn->proTxHash.ToString(), dmn->pdmnState->netInfo.GetPrimary().ToStringAddrPort());
                 return dmn;
             }
             return nullptr;
@@ -3791,16 +3776,16 @@ void CConnman::ThreadOpenMasternodeConnections(CDeterministicMNManager& dmnman, 
 
         mn_metaman.GetMetaInfo(connectToDmn->proTxHash)->SetLastOutboundAttempt(nANow);
 
-        OpenMasternodeConnection(CAddress(connectToDmn->pdmnState->addr, NODE_NETWORK), /*use_v2transport=*/GetLocalServices() & NODE_P2P_V2, isProbe);
+        OpenMasternodeConnection(CAddress(connectToDmn->pdmnState->netInfo.GetPrimary(), NODE_NETWORK), /*use_v2transport=*/GetLocalServices() & NODE_P2P_V2, isProbe);
         // should be in the list now if connection was opened
-        bool connected = ForNode(connectToDmn->pdmnState->addr, CConnman::AllNodes, [&](CNode* pnode) {
+        bool connected = ForNode(connectToDmn->pdmnState->netInfo.GetPrimary(), CConnman::AllNodes, [&](CNode* pnode) {
             if (pnode->fDisconnect) {
                 return false;
             }
             return true;
         });
         if (!connected) {
-            LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- connection failed for masternode  %s, service=%s\n", __func__, connectToDmn->proTxHash.ToString(), connectToDmn->pdmnState->addr.ToStringAddrPort());
+            LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- connection failed for masternode  %s, service=%s\n", __func__, connectToDmn->proTxHash.ToString(), connectToDmn->pdmnState->netInfo.GetPrimary().ToStringAddrPort());
             // Will take a few consequent failed attempts to PoSe-punish a MN.
             if (mn_metaman.GetMetaInfo(connectToDmn->proTxHash)->OutboundFailedTooManyTimes()) {
                 LogPrint(BCLog::NET_NETCONN, "CConnman::%s -- failed to connect to masternode %s too many times\n", __func__, connectToDmn->proTxHash.ToString());
@@ -4005,7 +3990,7 @@ bool CConnman::BindListenPort(const CService& addrBind, bilingual_str& strError,
         return false;
     }
 
-    std::unique_ptr<Sock> sock = CreateSock(addrBind);
+    std::unique_ptr<Sock> sock = CreateSock(addrBind.GetSAFamily());
     if (!sock) {
         strError = strprintf(Untranslated("Couldn't open socket for incoming connections (socket returned error %s)"), NetworkErrorString(WSAGetLastError()));
         LogPrintLevel(BCLog::NET, BCLog::Level::Error, "%s\n", strError.original);
@@ -4229,7 +4214,7 @@ bool CConnman::Start(CDeterministicMNManager& dmnman, CMasternodeMetaMan& mn_met
     Proxy i2p_sam;
     if (GetProxy(NET_I2P, i2p_sam) && connOptions.m_i2p_accept_incoming) {
         m_i2p_sam_session = std::make_unique<i2p::sam::Session>(gArgs.GetDataDirNet() / "i2p_private_key",
-                                                                i2p_sam.proxy, &interruptNet);
+                                                                i2p_sam, &interruptNet);
     }
 
     for (const auto& strDest : connOptions.vSeedNodes) {
@@ -5140,7 +5125,7 @@ static void CaptureMessageToFile(const CAddress& addr,
     std::string clean_addr = addr.ToStringAddrPort();
     std::replace(clean_addr.begin(), clean_addr.end(), ':', '_');
 
-    fs::path base_path = gArgs.GetDataDirNet() / "message_capture" / clean_addr;
+    fs::path base_path = gArgs.GetDataDirNet() / "message_capture" / fs::u8path(clean_addr);
     fs::create_directories(base_path);
 
     fs::path path = base_path / (is_incoming ? "msgs_recv.dat" : "msgs_sent.dat");

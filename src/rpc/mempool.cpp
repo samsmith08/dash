@@ -14,6 +14,7 @@
 #include <rpc/util.h>
 #include <txmempool.h>
 #include <univalue.h>
+#include <validation.h>
 
 #include <llmq/context.h>
 #include <llmq/instantsend.h>
@@ -458,7 +459,7 @@ RPCHelpMan savemempool()
     }
 
     UniValue ret(UniValue::VOBJ);
-    ret.pushKV("filename", fs::path((args.GetDataDirNet() / "mempool.dat")).u8string());
+    ret.pushKV("filename", fs::path((args.GetDataDirNet() / "mempool.dat")).utf8string());
 
     return ret;
 },

@@ -30,7 +30,7 @@
 CSimplifiedMNListEntry::CSimplifiedMNListEntry(const CDeterministicMN& dmn) :
     proRegTxHash(dmn.proTxHash),
     confirmedHash(dmn.pdmnState->confirmedHash),
-    service(dmn.pdmnState->addr),
+    netInfo(dmn.pdmnState->netInfo),
     pubKeyOperator(dmn.pdmnState->pubKeyOperator),
     keyIDVoting(dmn.pdmnState->keyIDVoting),
     isValid(!dmn.pdmnState->IsBanned()),
@@ -62,23 +62,23 @@ std::string CSimplifiedMNListEntry::ToString() const
         operatorPayoutAddress = EncodeDestination(dest);
     }
 
-    return strprintf("CSimplifiedMNListEntry(nVersion=%d, nType=%d, proRegTxHash=%s, confirmedHash=%s, service=%s, "
+    return strprintf("CSimplifiedMNListEntry(nVersion=%d, nType=%d, proRegTxHash=%s, confirmedHash=%s, "
                      "pubKeyOperator=%s, votingAddress=%s, isValid=%d, payoutAddress=%s, operatorPayoutAddress=%s, "
-                     "platformHTTPPort=%d, platformNodeID=%s)",
+                     "platformHTTPPort=%d, platformNodeID=%s)\n"
+                     "  %s",
                      nVersion, ToUnderlying(nType), proRegTxHash.ToString(), confirmedHash.ToString(),
-                     service.ToStringAddrPort(), pubKeyOperator.ToString(), EncodeDestination(PKHash(keyIDVoting)),
-                     isValid, payoutAddress, operatorPayoutAddress, platformHTTPPort, platformNodeID.ToString());
+                     pubKeyOperator.ToString(), EncodeDestination(PKHash(keyIDVoting)), isValid, payoutAddress,
+                     operatorPayoutAddress, platformHTTPPort, platformNodeID.ToString(), netInfo.ToString());
 }
 
 UniValue CSimplifiedMNListEntry::ToJson(bool extended) const
 {
-    UniValue obj;
-    obj.setObject();
+    UniValue obj(UniValue::VOBJ);
     obj.pushKV("nVersion", nVersion);
     obj.pushKV("nType", ToUnderlying(nType));
     obj.pushKV("proRegTxHash", proRegTxHash.ToString());
     obj.pushKV("confirmedHash", confirmedHash.ToString());
-    obj.pushKV("service", service.ToStringAddrPort());
+    obj.pushKV("service", netInfo.GetPrimary().ToStringAddrPort());
     obj.pushKV("pubKeyOperator", pubKeyOperator.ToString());
     obj.pushKV("votingAddress", EncodeDestination(PKHash(keyIDVoting)));
     obj.pushKV("isValid", isValid);
@@ -239,8 +239,7 @@ bool CSimplifiedMNListDiff::BuildQuorumChainlockInfo(const llmq::CQuorumManager&
 
 UniValue CSimplifiedMNListDiff::ToJson(bool extended) const
 {
-    UniValue obj;
-    obj.setObject();
+    UniValue obj(UniValue::VOBJ);
 
     obj.pushKV("nVersion", nVersion);
     obj.pushKV("baseBlockHash", baseBlockHash.ToString());

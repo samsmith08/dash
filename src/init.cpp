@@ -556,18 +556,22 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-connect=<ip>", "Connect only to the specified node; -noconnect disables automatic connections (the rules for this peer are the same as for -addnode). This option can be specified multiple times to connect to multiple nodes.", ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
     argsman.AddArg("-discover", "Discover own IP addresses (default: 1 when listening and no -externalip or -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-dns", strprintf("Allow DNS lookups for -addnode, -seednode and -connect (default: %u)", DEFAULT_NAME_LOOKUP), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-    argsman.AddArg("-dnsseed", strprintf("Query for peer addresses via DNS lookup, if low on addresses (default: %u unless -connect used)", DEFAULT_DNSSEED), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-dnsseed", strprintf("Query for peer addresses via DNS lookup, if low on addresses (default: %u unless -connect used or -maxconnections=0)", DEFAULT_DNSSEED), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-externalip=<ip>", "Specify your own public address", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-fixedseeds", strprintf("Allow fixed seeds if DNS seeds don't provide peers (default: %u)", DEFAULT_FIXEDSEEDS), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-forcednsseed", strprintf("Always query for peer addresses via DNS lookup (default: %u)", DEFAULT_FORCEDNSSEED), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-    argsman.AddArg("-listen", strprintf("Accept connections from outside (default: %u if no -proxy or -connect)", DEFAULT_LISTEN), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-listen", strprintf("Accept connections from outside (default: %u if no -proxy, -connect or -maxconnections=0)", DEFAULT_LISTEN), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-listenonion", strprintf("Automatically create Tor onion service (default: %d)", DEFAULT_LISTEN_ONION), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxconnections=<n>", strprintf("Maintain at most <n> connections to peers (temporary service connections excluded) (default: %u). This limit does not apply to connections manually added via -addnode or the addnode RPC, which have a separate limit of %u.", DEFAULT_MAX_PEER_CONNECTIONS, MAX_ADDNODE_CONNECTIONS), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxreceivebuffer=<n>", strprintf("Maximum per-connection receive buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXRECEIVEBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxsendbuffer=<n>", strprintf("Maximum per-connection memory usage for the send buffer, <n>*1000 bytes (default: %u)", DEFAULT_MAXSENDBUFFER), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxtimeadjustment", strprintf("Maximum allowed median peer time offset adjustment. Local perspective of time may be influenced by outbound peers forward or backward by this amount (default: %u seconds).", DEFAULT_MAX_TIME_ADJUSTMENT), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-maxuploadtarget=<n>", strprintf("Tries to keep outbound traffic under the given target per 24h. Limit does not apply to peers with 'download' permission or blocks created within past week. 0 = no limit (default: %s). Optional suffix units [k|K|m|M|g|G|t|T] (default: M). Lowercase is 1000 base while uppercase is 1024 base", DEFAULT_MAX_UPLOAD_TARGET), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+#if HAVE_SOCKADDR_UN
+    argsman.AddArg("-onion=<ip:port|path>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy). May be a local file path prefixed with 'unix:'.", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+#else
     argsman.AddArg("-onion=<ip:port>", "Use separate SOCKS5 proxy to reach peers via Tor onion services, set -noonion to disable (default: -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+#endif
     argsman.AddArg("-i2psam=<ip:port>", "I2P SAM proxy to reach I2P peers and accept I2P connections (default: none)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-i2pacceptincoming", strprintf("Whether to accept inbound I2P connections (default: %i). Ignored if -i2psam is not set. Listening for inbound I2P connections is done through the SAM proxy, not by binding to a local address and port.", DEFAULT_I2P_ACCEPT_INCOMING), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-onlynet=<net>", "Make automatic outbound connections only to network <net> (" + Join(GetNetworkNames(), ", ") + "). Inbound and manual connections are not affected by this option. It can be specified multiple times to allow multiple networks.", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -580,7 +584,11 @@ void SetupServerArgs(ArgsManager& argsman)
     // TODO: remove the sentence "Nodes not using ... incoming connections." once the changes from
     // https://github.com/bitcoin/bitcoin/pull/23542 have become widespread.
     argsman.AddArg("-port=<port>", strprintf("Listen for connections on <port>. Nodes not using the default ports (default: %u, testnet: %u, regtest: %u) are unlikely to get incoming connections. Not relevant for I2P (see doc/i2p.md).", defaultChainParams->GetDefaultPort(), testnetChainParams->GetDefaultPort(), regtestChainParams->GetDefaultPort()), ArgsManager::ALLOW_ANY | ArgsManager::NETWORK_ONLY, OptionsCategory::CONNECTION);
+#if HAVE_SOCKADDR_UN
+    argsman.AddArg("-proxy=<ip:port|path>", "Connect through SOCKS5 proxy, set -noproxy to disable (default: disabled). May be a local file path prefixed with 'unix:' if the proxy supports it.", ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_ELISION, OptionsCategory::CONNECTION);
+#else
     argsman.AddArg("-proxy=<ip:port>", "Connect through SOCKS5 proxy, set -noproxy to disable (default: disabled)", ArgsManager::ALLOW_ANY | ArgsManager::DISALLOW_ELISION, OptionsCategory::CONNECTION);
+#endif
     argsman.AddArg("-proxyrandomize", strprintf("Randomize credentials for every proxy connection. This enables Tor stream isolation (default: %u)", DEFAULT_PROXYRANDOMIZE), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-seednode=<ip>", "Connect to a node to retrieve peer addresses, and disconnect. This option can be specified multiple times to connect to multiple nodes.", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-socketevents=<mode>", "Socket events mode, which must be one of 'select', 'poll', 'epoll' or 'kqueue', depending on your system (default: Linux - 'epoll', FreeBSD/Apple - 'kqueue', Windows - 'select')", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
@@ -589,16 +597,12 @@ void SetupServerArgs(ArgsManager& argsman)
     argsman.AddArg("-torcontrol=<ip>:<port>", strprintf("Tor control port to use if onion listening enabled (default: %s)", DEFAULT_TOR_CONTROL), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
     argsman.AddArg("-torpassword=<pass>", "Tor control port password (default: empty)", ArgsManager::ALLOW_ANY | ArgsManager::SENSITIVE, OptionsCategory::CONNECTION);
 #ifdef USE_UPNP
-#if USE_UPNP
-    argsman.AddArg("-upnp", "Use UPnP to map the listening port (default: 1 when listening and no -proxy)", ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-#else
-    argsman.AddArg("-upnp", strprintf("Use UPnP to map the listening port (default: %u)", 0), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
-#endif
+    argsman.AddArg("-upnp", strprintf("Use UPnP to map the listening port (default: %u)", DEFAULT_UPNP), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
 #else
     hidden_args.emplace_back("-upnp");
 #endif
 #ifdef USE_NATPMP
-    argsman.AddArg("-natpmp", strprintf("Use NAT-PMP to map the listening port (default: %s)", DEFAULT_NATPMP ? "1 when listening and no -proxy" : "0"), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
+    argsman.AddArg("-natpmp", strprintf("Use NAT-PMP to map the listening port (default: %u)", DEFAULT_NATPMP), ArgsManager::ALLOW_ANY, OptionsCategory::CONNECTION);
 #else
     hidden_args.emplace_back("-natpmp");
 #endif // USE_NATPMP
@@ -913,12 +917,12 @@ void InitParameterInteraction(ArgsManager& args)
             LogPrintf("%s: parameter interaction: -whitebind set -> setting -listen=1\n", __func__);
     }
 
-    if (args.IsArgSet("-connect")) {
+    if (args.IsArgSet("-connect") || args.GetIntArg("-maxconnections", DEFAULT_MAX_PEER_CONNECTIONS) <= 0) {
         // when only connecting to trusted nodes, do not seed via DNS, or listen by default
         if (args.SoftSetBoolArg("-dnsseed", false))
-            LogPrintf("%s: parameter interaction: -connect set -> setting -dnsseed=0\n", __func__);
+            LogPrintf("%s: parameter interaction: -connect or -maxconnections=0 set -> setting -dnsseed=0\n", __func__);
         if (args.SoftSetBoolArg("-listen", false))
-            LogPrintf("%s: parameter interaction: -connect set -> setting -listen=0\n", __func__);
+            LogPrintf("%s: parameter interaction: -connect or -maxconnections=0 set -> setting -listen=0\n", __func__);
     }
 
     std::string proxy_arg = args.GetArg("-proxy", "");
@@ -1674,6 +1678,73 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
         }
     }
 
+    // Check port numbers
+    for (const std::string port_option : {
+        "-port",
+        "-rpcport",
+    }) {
+        if (args.IsArgSet(port_option)) {
+            const std::string port = args.GetArg(port_option, "");
+            uint16_t n;
+            if (!ParseUInt16(port, &n) || n == 0) {
+                return InitError(InvalidPortErrMsg(port_option, port));
+            }
+        }
+    }
+
+    for ([[maybe_unused]] const auto& [arg, unix] : std::vector<std::pair<std::string, bool>>{
+        // arg name                 UNIX socket support
+        {"-i2psam",                             false},
+        {"-onion",                               true},
+        {"-proxy",                               true},
+        {"-rpcbind",                            false},
+        {"-torcontrol",                         false},
+        {"-whitebind",                          false},
+        {"-zmqpubhashblock",                     true},
+        {"-zmqpubhashchainlock",                 true},
+        {"-zmqpubhashgovernanceobject",          true},
+        {"-zmqpubhashgovernancevote",            true},
+        {"-zmqpubhashinstantsenddoublespend",    true},
+        {"-zmqpubhashrecoveredsig",              true},
+        {"-zmqpubhashtx",                        true},
+        {"-zmqpubhashtxlock",                    true},
+        {"-zmqpubrawblock",                      true},
+        {"-zmqpubrawchainlock",                  true},
+        {"-zmqpubrawchainlocksig",               true},
+        {"-zmqpubrawgovernancevote",             true},
+        {"-zmqpubrawgovernanceobject",           true},
+        {"-zmqpubrawinstantsenddoublespend",     true},
+        {"-zmqpubrawrecoveredsig",               true},
+        {"-zmqpubrawtx",                         true},
+        {"-zmqpubrawtxlock",                     true},
+        {"-zmqpubrawtxlocksig",                  true},
+        {"-zmqpubsequence",                      true},
+    }) {
+        for (const std::string& socket_addr : args.GetArgs(arg)) {
+            std::string host_out;
+            uint16_t port_out{0};
+            if (!SplitHostPort(socket_addr, port_out, host_out)) {
+#if HAVE_SOCKADDR_UN
+                // Allow unix domain sockets for some options e.g. unix:/some/file/path
+                if (!unix || socket_addr.find(ADDR_PREFIX_UNIX) != 0) {
+                    return InitError(InvalidPortErrMsg(arg, socket_addr));
+                }
+#else
+                return InitError(InvalidPortErrMsg(arg, socket_addr));
+#endif
+            }
+        }
+    }
+
+    for (const std::string& socket_addr : args.GetArgs("-bind")) {
+        std::string host_out;
+        uint16_t port_out{0};
+        std::string bind_socket_addr = socket_addr.substr(0, socket_addr.rfind('='));
+        if (!SplitHostPort(bind_socket_addr, port_out, host_out)) {
+            return InitError(InvalidPortErrMsg("-bind", socket_addr));
+        }
+    }
+
     // sanitize comments per BIP-0014, format user agent and check total size
     std::vector<std::string> uacomments;
 
@@ -1733,12 +1804,18 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
     // -noproxy (or -proxy=0) as well as the empty string can be used to not set a proxy, this is the default
     std::string proxyArg = args.GetArg("-proxy", "");
     if (proxyArg != "" && proxyArg != "0") {
-        const std::optional<CService> proxyAddr{Lookup(proxyArg, 9050, fNameLookup)};
-        if (!proxyAddr.has_value()) {
-            return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxyArg));
+        Proxy addrProxy;
+        if (IsUnixSocketPath(proxyArg)) {
+            addrProxy = Proxy(proxyArg, proxyRandomize);
+        } else {
+            const std::optional<CService> proxyAddr{Lookup(proxyArg, 9050, fNameLookup)};
+            if (!proxyAddr.has_value()) {
+                return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxyArg));
+            }
+
+            addrProxy = Proxy(proxyAddr.value(), proxyRandomize);
         }
 
-        Proxy addrProxy = Proxy(proxyAddr.value(), proxyRandomize);
         if (!addrProxy.IsValid())
             return InitError(strprintf(_("Invalid -proxy address or hostname: '%s'"), proxyArg));
 
@@ -1764,11 +1841,16 @@ bool AppInitMain(NodeContext& node, interfaces::BlockAndHeaderTipInfo* tip_info)
                       "reaching the Tor network is explicitly forbidden: -onion=0"));
             }
         } else {
-            const std::optional<CService> addr{Lookup(onionArg, 9050, fNameLookup)};
-            if (!addr.has_value() || !addr->IsValid()) {
-                return InitError(strprintf(_("Invalid -onion address or hostname: '%s'"), onionArg));
+            if (IsUnixSocketPath(onionArg)) {
+                onion_proxy = Proxy(onionArg, proxyRandomize);
+            } else {
+                const std::optional<CService> addr{Lookup(onionArg, 9050, fNameLookup)};
+                if (!addr.has_value() || !addr->IsValid()) {
+                    return InitError(strprintf(_("Invalid -onion address or hostname: '%s'"), onionArg));
+                }
+
+                onion_proxy = Proxy(addr.value(), proxyRandomize);
             }
-            onion_proxy = Proxy{addr.value(), proxyRandomize};
         }
     }
 

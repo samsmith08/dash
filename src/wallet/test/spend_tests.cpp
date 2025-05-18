@@ -5,6 +5,7 @@
 #include <policy/fees.h>
 #include <validation.h>
 #include <wallet/coincontrol.h>
+#include <wallet/spend.h>
 #include <wallet/test/util.h>
 #include <wallet/test/wallet_test_fixture.h>
 
@@ -15,7 +16,7 @@ BOOST_FIXTURE_TEST_SUITE(spend_tests, WalletTestingSetup)
 BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
 {
     CreateAndProcessBlock({}, GetScriptForRawPubKey(coinbaseKey.GetPubKey()));
-    auto wallet = CreateSyncedWallet(*m_node.chain, *m_node.coinjoin_loader, m_node.chainman->ActiveChain(), coinbaseKey);
+    auto wallet = CreateSyncedWallet(*m_node.chain, *m_node.coinjoin_loader, m_node.chainman->ActiveChain(), m_args, coinbaseKey);
 
     // Check that a subtract-from-recipient transaction slightly less than the
     // coinbase input amount does not create a change output (because it would
@@ -32,7 +33,7 @@ BOOST_FIXTURE_TEST_CASE(SubtractFee, TestChain100Setup)
         coin_control.m_feerate.emplace(10000);
         coin_control.fOverrideFeeRate = true;
         FeeCalculation fee_calc;
-        BOOST_CHECK(wallet->CreateTransaction({recipient}, tx, fee, change_pos, error, coin_control, fee_calc));
+        BOOST_CHECK(CreateTransaction(*wallet, {recipient}, tx, fee, change_pos, error, coin_control, fee_calc));
         BOOST_CHECK_EQUAL(tx->vout.size(), 1);
         BOOST_CHECK_EQUAL(tx->vout[0].nValue, recipient.nAmount + leftover_input_amount - fee);
         BOOST_CHECK_GT(fee, 0);

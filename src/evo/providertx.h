@@ -6,6 +6,7 @@
 #define BITCOIN_EVO_PROVIDERTX_H
 
 #include <bls/bls.h>
+#include <evo/netinfo.h>
 #include <evo/specialtx.h>
 #include <primitives/transaction.h>
 
@@ -40,7 +41,7 @@ public:
     MnType nType{MnType::Regular};
     uint16_t nMode{0};                                     // only 0 supported for now
     COutPoint collateralOutpoint{uint256(), (uint32_t)-1}; // if hash is null, we refer to a ProRegTx output
-    CService addr;
+    MnNetInfo netInfo;
     uint160 platformNodeID{};
     uint16_t platformP2PPort{0};
     uint16_t platformHTTPPort{0};
@@ -66,7 +67,7 @@ public:
                 obj.nType,
                 obj.nMode,
                 obj.collateralOutpoint,
-                obj.addr,
+                obj.netInfo,
                 obj.keyIDOwner,
                 CBLSLazyPublicKeyVersionWrapper(const_cast<CBLSLazyPublicKey&>(obj.pubKeyOperator), (obj.nVersion == ProTxVersion::LegacyBLS)),
                 obj.keyIDVoting,
@@ -91,31 +92,7 @@ public:
 
     std::string ToString() const;
 
-    [[nodiscard]] UniValue ToJson() const
-    {
-        UniValue obj;
-        obj.setObject();
-        obj.pushKV("version", nVersion);
-        obj.pushKV("type", ToUnderlying(nType));
-        obj.pushKV("collateralHash", collateralOutpoint.hash.ToString());
-        obj.pushKV("collateralIndex", (int)collateralOutpoint.n);
-        obj.pushKV("service", addr.ToStringAddrPort());
-        obj.pushKV("ownerAddress", EncodeDestination(PKHash(keyIDOwner)));
-        obj.pushKV("votingAddress", EncodeDestination(PKHash(keyIDVoting)));
-
-        if (CTxDestination dest; ExtractDestination(scriptPayout, dest)) {
-            obj.pushKV("payoutAddress", EncodeDestination(dest));
-        }
-        obj.pushKV("pubKeyOperator", pubKeyOperator.ToString());
-        obj.pushKV("operatorReward", (double)nOperatorReward / 100);
-        if (nType == MnType::Evo) {
-            obj.pushKV("platformNodeID", platformNodeID.ToString());
-            obj.pushKV("platformP2PPort", platformP2PPort);
-            obj.pushKV("platformHTTPPort", platformHTTPPort);
-        }
-        obj.pushKV("inputsHash", inputsHash.ToString());
-        return obj;
-    }
+    [[nodiscard]] UniValue ToJson() const;
 
     bool IsTriviallyValid(bool is_basic_scheme_active, TxValidationState& state) const;
 };
@@ -133,7 +110,7 @@ public:
     uint16_t nVersion{ProTxVersion::LegacyBLS}; // message version
     MnType nType{MnType::Regular};
     uint256 proTxHash;
-    CService addr;
+    MnNetInfo netInfo;
     uint160 platformNodeID{};
     uint16_t platformP2PPort{0};
     uint16_t platformHTTPPort{0};
@@ -156,7 +133,7 @@ public:
         }
         READWRITE(
                 obj.proTxHash,
-                obj.addr,
+                obj.netInfo,
                 obj.scriptOperatorPayout,
                 obj.inputsHash
         );
@@ -175,25 +152,7 @@ public:
 
     std::string ToString() const;
 
-    [[nodiscard]] UniValue ToJson() const
-    {
-        UniValue obj;
-        obj.setObject();
-        obj.pushKV("version", nVersion);
-        obj.pushKV("type", ToUnderlying(nType));
-        obj.pushKV("proTxHash", proTxHash.ToString());
-        obj.pushKV("service", addr.ToStringAddrPort());
-        if (CTxDestination dest; ExtractDestination(scriptOperatorPayout, dest)) {
-            obj.pushKV("operatorPayoutAddress", EncodeDestination(dest));
-        }
-        if (nType == MnType::Evo) {
-            obj.pushKV("platformNodeID", platformNodeID.ToString());
-            obj.pushKV("platformP2PPort", platformP2PPort);
-            obj.pushKV("platformHTTPPort", platformHTTPPort);
-        }
-        obj.pushKV("inputsHash", inputsHash.ToString());
-        return obj;
-    }
+    [[nodiscard]] UniValue ToJson() const;
 
     bool IsTriviallyValid(bool is_basic_scheme_active, TxValidationState& state) const;
 };
@@ -243,20 +202,7 @@ public:
 
     std::string ToString() const;
 
-    [[nodiscard]] UniValue ToJson() const
-    {
-        UniValue obj;
-        obj.setObject();
-        obj.pushKV("version", nVersion);
-        obj.pushKV("proTxHash", proTxHash.ToString());
-        obj.pushKV("votingAddress", EncodeDestination(PKHash(keyIDVoting)));
-        if (CTxDestination dest; ExtractDestination(scriptPayout, dest)) {
-            obj.pushKV("payoutAddress", EncodeDestination(dest));
-        }
-        obj.pushKV("pubKeyOperator", pubKeyOperator.ToString());
-        obj.pushKV("inputsHash", inputsHash.ToString());
-        return obj;
-    }
+    [[nodiscard]] UniValue ToJson() const;
 
     bool IsTriviallyValid(bool is_basic_scheme_active, TxValidationState& state) const;
 };
@@ -309,16 +255,7 @@ public:
 
     std::string ToString() const;
 
-    [[nodiscard]] UniValue ToJson() const
-    {
-        UniValue obj;
-        obj.setObject();
-        obj.pushKV("version", nVersion);
-        obj.pushKV("proTxHash", proTxHash.ToString());
-        obj.pushKV("reason", (int)nReason);
-        obj.pushKV("inputsHash", inputsHash.ToString());
-        return obj;
-    }
+    [[nodiscard]] UniValue ToJson() const;
 
     bool IsTriviallyValid(bool is_basic_scheme_active, TxValidationState& state) const;
 };

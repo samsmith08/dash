@@ -7,10 +7,10 @@
 #include <policy/fees.h>
 #include <policy/policy.h>
 #include <script/sign.h>
-#include <validation.h>
-#include <wallet/fees.h>
-#include <wallet/wallet.h>
 #include <util/translation.h>
+#include <wallet/fees.h>
+#include <wallet/spend.h>
+#include <wallet/wallet.h>
 
 #include <numeric>
 
@@ -124,9 +124,9 @@ CTransactionBuilder::CTransactionBuilder(CWallet& wallet, const CompactTallyItem
     // Create dummy tx to calculate the exact required fees upfront for accurate amount and fee calculations
     CMutableTransaction dummyTx;
     // Select all tallyItem outputs in the coinControl so that CreateTransaction knows what to use
-    for (const auto& coin : tallyItem.vecInputCoins) {
-        coinControl.Select(coin.outpoint);
-        dummyTx.vin.emplace_back(coin.outpoint, CScript());
+    for (const auto& outpoint : tallyItem.outpoints) {
+        coinControl.Select(outpoint);
+        dummyTx.vin.emplace_back(outpoint, CScript());
     }
     // Get a comparable dummy scriptPubKey, avoid writing/flushing to the actual wallet db
     CScript dummyScript;
@@ -275,7 +275,7 @@ bool CTransactionBuilder::Commit(bilingual_str& strResult)
     {
         LOCK2(m_wallet.cs_wallet, cs_main);
         FeeCalculation fee_calc_out;
-        if (!m_wallet.CreateTransaction(vecSend, tx, nFeeRet, nChangePosRet, strResult, coinControl, fee_calc_out)) {
+        if (!CreateTransaction(m_wallet, vecSend, tx, nFeeRet, nChangePosRet, strResult, coinControl, fee_calc_out)) {
             return false;
         }
     }

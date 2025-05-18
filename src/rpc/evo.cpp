@@ -36,6 +36,7 @@
 #ifdef ENABLE_WALLET
 #include <wallet/coincontrol.h>
 #include <wallet/rpcwallet.h>
+#include <wallet/spend.h>
 #include <wallet/wallet.h>
 #endif//ENABLE_WALLET
 
@@ -256,12 +257,12 @@ static void FundSpecialTx(CWallet& wallet, CMutableTransaction& tx, const Specia
     coinControl.fRequireAllInputs = false;
 
     std::vector<COutput> vecOutputs;
-    wallet.AvailableCoins(vecOutputs);
+    AvailableCoins(wallet, vecOutputs);
 
     for (const auto& out : vecOutputs) {
         CTxDestination txDest;
-        if (ExtractDestination(out.tx->tx->vout[out.i].scriptPubKey, txDest) && txDest == fundDest) {
-            coinControl.Select(COutPoint(out.tx->tx->GetHash(), out.i));
+        if (ExtractDestination(out.txout.scriptPubKey, txDest) && txDest == fundDest) {
+            coinControl.Select(out.outpoint);
         }
     }
 
@@ -275,7 +276,8 @@ static void FundSpecialTx(CWallet& wallet, CMutableTransaction& tx, const Specia
     bilingual_str strFailReason;
 
     FeeCalculation fee_calc_out;
-    if (!wallet.CreateTransaction(vecSend, newTx, nFee, nChangePos, strFailReason, coinControl, fee_calc_out, false, tx.vExtraPayload.size())) {
+    if (!CreateTransaction(wallet, vecSend, newTx, nFee, nChangePos, strFailReason, coinControl, fee_calc_out, false,
+                           tx.vExtraPayload.size())) {
         throw JSONRPCError(RPC_INTERNAL_ERROR, strFailReason.original);
     }
 
@@ -680,11 +682,9 @@ static UniValue protx_register_common_wrapper(const JSONRPCRequest& request,
         paramIdx += 2;
     }
 
-    if (request.params[paramIdx].get_str() != "") {
-        if (auto addr = Lookup(request.params[paramIdx].get_str(), Params().GetDefaultPort(), false); addr.has_value()) {
-            ptx.addr = addr.value();
-        } else {
-            throw std::runtime_error(strprintf("invalid network address %s", request.params[paramIdx].get_str()));
+    if (!request.params[paramIdx].get_str().empty()) {
+        if (auto entryRet = ptx.netInfo.AddEntry(request.params[paramIdx].get_str()); entryRet != NetInfoStatus::Success) {
+            throw std::runtime_error(strprintf("%s (%s)", NISToString(entryRet), request.params[paramIdx].get_str()));
         }
     }
 
@@ -694,7 +694,7 @@ static UniValue protx_register_common_wrapper(const JSONRPCRequest& request,
 
     CKeyID keyIDVoting = ptx.keyIDOwner;
 
-    if (request.params[paramIdx + 3].get_str() != "") {
+    if (!request.params[paramIdx + 3].get_str().empty()) {
         keyIDVoting = ParsePubKeyIDFromAddress(request.params[paramIdx + 3].get_str(), "voting address");
     }
 
@@ -976,10 +976,8 @@ static UniValue protx_update_service_common_wrapper(const JSONRPCRequest& reques
 
     ptx.nVersion = dmn->pdmnState->nVersion;
 
-    if (auto addr = Lookup(request.params[1].get_str().c_str(), Params().GetDefaultPort(), false); addr.has_value()) {
-        ptx.addr = addr.value();
-    } else {
-        throw std::runtime_error(strprintf("invalid network address %s", request.params[1].get_str()));
+    if (auto entryRet = ptx.netInfo.AddEntry(request.params[1].get_str()); entryRet != NetInfoStatus::Success) {
+        throw std::runtime_error(strprintf("%s (%s)", NISToString(entryRet), request.params[1].get_str()));
     }
 
     CBLSSecretKey keyOperator = ParseBLSSecretKey(request.params[2].get_str(), "operatorKey");
@@ -1106,7 +1104,7 @@ static RPCHelpMan protx_update_registrar_wrapper(const bool specific_legacy_bls_
     ptx.keyIDVoting = dmn->pdmnState->keyIDVoting;
     ptx.scriptPayout = dmn->pdmnState->scriptPayout;
 
-    if (request.params[1].get_str() != "") {
+    if (!request.params[1].get_str().empty()) {
         // new pubkey
         ptx.pubKeyOperator.Set(ParseBLSPubKey(request.params[1].get_str(), "operator BLS address", use_legacy), use_legacy);
     } else {
@@ -1116,13 +1114,13 @@ static RPCHelpMan protx_update_registrar_wrapper(const bool specific_legacy_bls_
 
     CHECK_NONFATAL(ptx.pubKeyOperator.IsLegacy() == (ptx.nVersion == ProTxVersion::LegacyBLS));
 
-    if (request.params[2].get_str() != "") {
+    if (!request.params[2].get_str().empty()) {
         ptx.keyIDVoting = ParsePubKeyIDFromAddress(request.params[2].get_str(), "voting address");
     }
 
     CTxDestination payoutDest;
     ExtractDestination(ptx.scriptPayout, payoutDest);
-    if (request.params[3].get_str() != "") {
+    if (!request.params[3].get_str().empty()) {
         payoutDest = DecodeDestination(request.params[3].get_str());
         if (!IsValidDestination(payoutDest)) {
             throw JSONRPCError(RPC_INVALID_ADDRESS_OR_KEY, strprintf("invalid payout address: %s", request.params[3].get_str()));

@@ -12,6 +12,7 @@ DIST_SUBDIRS = secp256k1
 AM_LDFLAGS = $(LIBTOOL_LDFLAGS) $(HARDENED_LDFLAGS) $(GPROF_LDFLAGS) $(SANITIZER_LDFLAGS) $(CORE_LDFLAGS)
 AM_CFLAGS = $(DEBUG_CFLAGS)
 AM_CXXFLAGS = $(DEBUG_CXXFLAGS) $(HARDENED_CXXFLAGS) $(WARN_CXXFLAGS) $(NOWARN_CXXFLAGS) $(ERROR_CXXFLAGS) $(GPROF_CXXFLAGS) $(SANITIZER_CXXFLAGS) $(CORE_CXXFLAGS)
+AM_OBJCXXFLAGS = $(AM_CXXFLAGS)
 AM_CPPFLAGS = $(DEBUG_CPPFLAGS) $(HARDENED_CPPFLAGS) $(CORE_CPPFLAGS)
 AM_LIBTOOLFLAGS = --preserve-dup-deps
 PTHREAD_FLAGS = $(PTHREAD_CFLAGS) $(PTHREAD_LIBS)
@@ -191,6 +192,7 @@ BITCOIN_CORE_H = \
   evo/evodb.h \
   evo/mnauth.h \
   evo/mnhftx.h \
+  evo/netinfo.h \
   evo/providertx.h \
   evo/simplifiedmns.h \
   evo/specialtx.h \
@@ -296,7 +298,6 @@ BITCOIN_CORE_H = \
   psbt.h \
   random.h \
   randomenv.h \
-  reverse_iterator.h \
   rpc/blockchain.h \
   rpc/client.h \
   rpc/index_util.h \
@@ -392,6 +393,7 @@ BITCOIN_CORE_H = \
   wallet/bip39.h \
   wallet/bip39_english.h \
   wallet/coincontrol.h \
+  wallet/coinjoin.h \
   wallet/coinselection.h \
   wallet/context.h \
   wallet/crypter.h \
@@ -591,6 +593,7 @@ libbitcoin_wallet_a_SOURCES = \
   coinjoin/interfaces.cpp \
   coinjoin/util.cpp \
   wallet/bip39.cpp \
+  wallet/coinjoin.cpp \
   wallet/coincontrol.cpp \
   wallet/context.cpp \
   wallet/crypter.cpp \
@@ -773,6 +776,8 @@ libbitcoin_common_a_SOURCES = \
   core_read.cpp \
   core_write.cpp \
   deploymentinfo.cpp \
+  evo/core_write.cpp \
+  evo/netinfo.cpp \
   governance/common.cpp \
   init/common.cpp \
   key.cpp \

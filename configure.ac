@@ -96,8 +96,6 @@ LT_INIT([pic-only win32-dll])
 
 dnl Check/return PATH for base programs.
 AC_PATH_TOOL([AR], [ar])
-AC_PATH_TOOL([RANLIB], [ranlib])
-AC_PATH_TOOL([STRIP], [strip])
 AC_PATH_TOOL([GCOV], [gcov])
 AC_PATH_TOOL([LLVM_COV], [llvm-cov])
 AC_PATH_PROG([LCOV], [lcov])
@@ -452,9 +450,45 @@ if test "$enable_werror" = "yes"; then
   fi
   ERROR_CXXFLAGS=$CXXFLAG_WERROR
 
-  dnl -Wstringop-overread and -Wstringop-overflow are broken in gcc
-  AX_CHECK_COMPILE_FLAG([-Wstringop-overread], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wno-stringop-overread"], [], [$CXXFLAG_WERROR])
-  AX_CHECK_COMPILE_FLAG([-Wstringop-overflow], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wno-stringop-overflow"], [], [$CXXFLAG_WERROR])
+  dnl -Warray-bounds and -Wdangling-reference cause problems with GCC. Do not treat these warnings as errors.
+  dnl Suppress -Warray-bounds entirely because of noisy output, currently unhappy with immer implementation.
+  AX_CHECK_COMPILE_FLAG([-Warray-bounds], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-array-bounds"], [], [$CXXFLAG_WERROR], [AC_LANG_SOURCE([
+    #if defined(__clang__) || defined(__INTEL_COMPILER) || !defined(__GNUC__)
+      #error Non-GCC compiler detected, not setting flag
+    #endif
+    int main(void) { return 0; }
+  ])])
+  dnl TODO: Remove suppression after backporting bitcoin#27605
+  AX_CHECK_COMPILE_FLAG([-Wdangling-reference], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-error=dangling-reference"], [], [$CXXFLAG_WERROR], [AC_LANG_SOURCE([
+    #if defined(__clang__) || defined(__INTEL_COMPILER) || !defined(__GNUC__)
+      #error Non-GCC compiler detected, not setting flag
+    #endif
+    int main(void) { return 0; }
+  ])])
+
+  dnl -Wattributes cause problems with some versions of GCC. Do not treat these warnings as errors.
+  AX_CHECK_COMPILE_FLAG([-Wattributes], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-error=attributes"], [], [$CXXFLAG_WERROR], [AC_LANG_SOURCE([
+    #if defined(__clang__) || defined(__INTEL_COMPILER) || !defined(__GNUC__)
+      #error Non-GCC compiler detected, not setting flag
+    #elif defined(__GNUC__) && __GNUC__ >= 14
+      #error GCC >=14 detected, not setting flag
+    #endif
+    int main(void) { return 0; }
+  ])])
+
+  dnl -Wstringop-overread and -Wstringop-overflow are broken in GCC. Suppress warnings entirely to avoid noisy output.
+  AX_CHECK_COMPILE_FLAG([-Wstringop-overread], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-stringop-overread"], [], [$CXXFLAG_WERROR], [AC_LANG_SOURCE([
+    #if defined(__clang__) || defined(__INTEL_COMPILER) || !defined(__GNUC__)
+      #error Non-GCC compiler detected, not setting flag
+    #endif
+    int main(void) { return 0; }
+  ])])
+  AX_CHECK_COMPILE_FLAG([-Wstringop-overflow], [NOWARN_CXXFLAGS="$NOWARN_CXXFLAGS -Wno-stringop-overflow"], [], [$CXXFLAG_WERROR], [AC_LANG_SOURCE([
+    #if defined(__clang__) || defined(__INTEL_COMPILER) || !defined(__GNUC__)
+      #error Non-GCC compiler detected, not setting flag
+    #endif
+    int main(void) { return 0; }
+  ])])
 fi
 
 AX_CHECK_COMPILE_FLAG([-Wall], [WARN_CXXFLAGS="$WARN_CXXFLAGS -Wall"], [], [$CXXFLAG_WERROR])
@@ -600,7 +634,7 @@ CXXFLAGS="$TEMP_CXXFLAGS"
 
 # ARM
 AX_CHECK_COMPILE_FLAG([-march=armv8-a+crc+crypto], [ARM_CRC_CXXFLAGS="-march=armv8-a+crc+crypto"], [], [$CXXFLAG_WERROR])
-AX_CHECK_COMPILE_FLAG([-march=armv8-a+crc+crypto], [ARM_SHANI_CXXFLAGS="-march=armv8-a+crc+crypto"], [], [$CXXFLAG_WERROR])
+AX_CHECK_COMPILE_FLAG([-march=armv8-a+crypto], [ARM_SHANI_CXXFLAGS="-march=armv8-a+crypto"], [], [$CXXFLAG_WERROR])
 
 TEMP_CXXFLAGS="$CXXFLAGS"
 CXXFLAGS="$CXXFLAGS $ARM_CRC_CXXFLAGS"
@@ -728,6 +762,10 @@ case $host in
 
      dnl We require Windows 7 (NT 6.1) or later
      AX_CHECK_LINK_FLAG([-Wl,--major-subsystem-version -Wl,6 -Wl,--minor-subsystem-version -Wl,1], [CORE_LDFLAGS="$CORE_LDFLAGS -Wl,--major-subsystem-version -Wl,6 -Wl,--minor-subsystem-version -Wl,1"], [], [$LDFLAG_WERROR])
+
+     dnl Avoid the use of aligned vector instructions when building for Windows.
+     dnl See https://gcc.gnu.org/bugzilla/show_bug.cgi?id=54412.
+     AX_CHECK_COMPILE_FLAG([-Wa,-muse-unaligned-vector-move], [CORE_CXXFLAGS="$CORE_CXXFLAGS -Wa,-muse-unaligned-vector-move"], [], [$CXXFLAG_WERROR])
      ;;
   *darwin*)
      TARGET_OS=darwin
@@ -811,7 +849,10 @@ case $host in
      fi
 
      CORE_CPPFLAGS="$CORE_CPPFLAGS -DMAC_OSX -DOBJC_OLD_DISPATCH_PROTOTYPES=0"
-     OBJCXXFLAGS="$CXXFLAGS"
+
+     dnl ignore deprecated-declarations warnings coming from objcxx code
+     dnl "'NSUserNotificationCenter' is deprecated: first deprecated in macOS 11.0".
+     OBJCXXFLAGS="$CXXFLAGS -Wno-deprecated-declarations"
      ;;
    *android*)
      dnl make sure android stays above linux for hosts like *linux-android*
@@ -992,12 +1033,6 @@ if test "$use_hardening" != "no"; then
   AX_CHECK_LINK_FLAG([-Wl,-z,now], [HARDENED_LDFLAGS="$HARDENED_LDFLAGS -Wl,-z,now"], [], [$LDFLAG_WERROR])
   AX_CHECK_LINK_FLAG([-Wl,-z,separate-code], [HARDENED_LDFLAGS="$HARDENED_LDFLAGS -Wl,-z,separate-code"], [], [$LDFLAG_WERROR])
   AX_CHECK_LINK_FLAG([-fPIE -pie], [PIE_FLAGS="-fPIE"; HARDENED_LDFLAGS="$HARDENED_LDFLAGS -pie"], [], [$CXXFLAG_WERROR])
-
-  case $host in
-    *mingw*)
-       AC_CHECK_LIB([ssp], [main], [], [AC_MSG_ERROR([libssp missing])])
-    ;;
-  esac
 fi
 
 dnl These flags are specific to ld64, and may cause issues with other linkers.
@@ -1009,7 +1044,7 @@ if test "$TARGET_OS" = "darwin"; then
   AX_CHECK_LINK_FLAG([-Wl,-fixup_chains], [HARDENED_LDFLAGS="$HARDENED_LDFLAGS -Wl,-fixup_chains"], [], [$LDFLAG_WERROR])
 fi
 
-AC_CHECK_HEADERS([sys/select.h sys/prctl.h sys/sysctl.h vm/vm_param.h sys/vmmeter.h sys/resources.h])
+AC_CHECK_HEADERS([sys/select.h sys/prctl.h vm/vm_param.h sys/vmmeter.h sys/resources.h])
 
 AC_CHECK_DECLS([getifaddrs, freeifaddrs],[CHECK_SOCKET],,
     [#include <sys/types.h>
@@ -1021,8 +1056,6 @@ AC_CHECK_DECLS([fork])
 AC_CHECK_DECLS([setsid])
 
 AC_CHECK_DECLS([pipe2])
-
-AC_CHECK_FUNCS([timingsafe_bcmp])
 
 dnl Check for mallopt(M_ARENA_MAX) (to set glibc arenas)
 AC_MSG_CHECKING([for mallopt M_ARENA_MAX])
@@ -1124,22 +1157,6 @@ if test "$use_thread_local" = "yes" || test "$use_thread_local" = "auto"; then
   LDFLAGS="$TEMP_LDFLAGS"
 fi
 
-dnl check for gmtime_r(), fallback to gmtime_s() if that is unavailable
-dnl fail if neither are available.
-AC_MSG_CHECKING([for gmtime_r])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <ctime>]],
-  [[ gmtime_r((const time_t *) nullptr, (struct tm *) nullptr); ]])],
-  [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_GMTIME_R], [1], [Define this symbol if gmtime_r is available]) ],
-  [ AC_MSG_RESULT([no]);
-    AC_MSG_CHECKING([for gmtime_s]);
-    AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <ctime>]],
-       [[ gmtime_s((struct tm *) nullptr, (const time_t *) nullptr); ]])],
-       [ AC_MSG_RESULT([yes])],
-       [ AC_MSG_RESULT([no]); AC_MSG_ERROR([Both gmtime_r and gmtime_s are unavailable]) ]
-    )
-  ]
-)
-
 dnl Check for different ways of gathering OS randomness
 AC_MSG_CHECKING([for Linux getrandom syscall])
 AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <unistd.h>
@@ -1178,14 +1195,6 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <sys/types.h>
     static int name[2] = {CTL_KERN, KERN_ARND};
     sysctl(name, 2, nullptr, nullptr, nullptr, 0); ]])],
  [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_SYSCTL_ARND], [1], [Define this symbol if the BSD sysctl(KERN_ARND) is available]) ],
- [ AC_MSG_RESULT([no])]
-)
-
-AC_MSG_CHECKING([for if type char equals int8_t])
-AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[#include <stdint.h>
-  #include <type_traits>]],
- [[ static_assert(std::is_same<int8_t, char>::value, ""); ]])],
- [ AC_MSG_RESULT([yes]); AC_DEFINE([CHAR_EQUALS_INT8], [1], [Define this symbol if type char equals int8_t]) ],
  [ AC_MSG_RESULT([no])]
 )
 
@@ -1248,8 +1257,21 @@ AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
   ]], [[
     getauxval(AT_HWCAP);
   ]])],
- [ AC_MSG_RESULT([yes]); HAVE_STRONG_GETAUXVAL=1; AC_DEFINE([HAVE_STRONG_GETAUXVAL], [1], [Define this symbol to build code that uses getauxval)]) ],
+ [ AC_MSG_RESULT([yes]); HAVE_STRONG_GETAUXVAL=1; AC_DEFINE([HAVE_STRONG_GETAUXVAL], [1], [Define this symbol to build code that uses getauxval]) ],
  [ AC_MSG_RESULT([no]); HAVE_STRONG_GETAUXVAL=0 ]
+)
+
+# Check for UNIX sockets
+AC_MSG_CHECKING(for sockaddr_un)
+AC_COMPILE_IFELSE([AC_LANG_PROGRAM([[
+    #include <sys/socket.h>
+    #include <sys/un.h>
+  ]], [[
+    struct sockaddr_un addr;
+    addr.sun_family = AF_UNIX;
+  ]])],
+ [ AC_MSG_RESULT([yes]); AC_DEFINE([HAVE_SOCKADDR_UN], [1], [Define this symbol if platform supports unix domain sockets]) ],
+ [ AC_MSG_RESULT([no]); ]
 )
 
 have_any_system=no
@@ -1863,7 +1885,6 @@ AC_SUBST(HAVE_O_CLOEXEC)
 AC_SUBST(HAVE_BUILTIN_PREFETCH)
 AC_SUBST(HAVE_MM_PREFETCH)
 AC_SUBST(HAVE_STRONG_GETAUXVAL)
-AC_SUBST(HAVE_GMTIME_R)
 AC_SUBST(ANDROID_ARCH)
 AC_SUBST(HAVE_EVHTTP_CONNECTION_GET_PEER_CONST_CHAR)
 AC_CONFIG_FILES([Makefile src/Makefile doc/man/Makefile share/setup.nsi share/qt/Info.plist test/config.ini])

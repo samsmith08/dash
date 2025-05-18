@@ -4,6 +4,7 @@
 
 #include <coinjoin/client.h>
 
+#include <chain.h>
 #include <chainparams.h>
 #include <coinjoin/options.h>
 #include <consensus/validation.h>
@@ -21,10 +22,12 @@
 #include <util/ranges.h>
 #include <util/system.h>
 #include <util/translation.h>
-#include <validation.h>
 #include <version.h>
 #include <wallet/coincontrol.h>
+#include <wallet/coinjoin.h>
 #include <wallet/fees.h>
+#include <wallet/receive.h>
+#include <wallet/spend.h>
 #include <walletinitinterface.h>
 
 #include <memory>
@@ -183,7 +186,7 @@ void CCoinJoinClientSession::ProcessMessage(CNode& peer, CChainState& active_cha
     if (!m_mn_sync.IsBlockchainSynced()) return;
 
     if (!mixingMasternode) return;
-    if (mixingMasternode->pdmnState->addr != peer.addr) return;
+    if (mixingMasternode->pdmnState->netInfo.GetPrimary() != peer.addr) return;
 
     if (msg_type == NetMsgType::DSSTATUSUPDATE) {
         CCoinJoinStatusUpdate psssup;
@@ -824,7 +827,7 @@ bool CCoinJoinClientSession::DoAutomaticDenominating(ChainstateManager& chainman
             return false;
         }
 
-        const auto bal = m_wallet->GetBalance();
+        const auto bal = GetBalance(*m_wallet);
 
         // check if there is anything left to do
         CAmount nBalanceAnonymized = bal.m_anonymized;
@@ -1103,7 +1106,7 @@ bool CCoinJoinClientSession::JoinExistingQueue(CAmount nBalanceNeedsAnonymized, 
 
         m_clientman.AddUsedMasternode(dsq.masternodeOutpoint);
 
-        if (connman.IsMasternodeOrDisconnectRequested(dmn->pdmnState->addr)) {
+        if (connman.IsMasternodeOrDisconnectRequested(dmn->pdmnState->netInfo.GetPrimary())) {
             WalletCJLogPrint(m_wallet, /* Continued */
                              "CCoinJoinClientSession::JoinExistingQueue -- skipping connection, masternode=%s\n", dmn->proTxHash.ToString());
             continue;
@@ -1175,7 +1178,7 @@ bool CCoinJoinClientSession::StartNewQueue(CAmount nBalanceNeedsAnonymized, CCon
             continue;
         }
 
-        if (connman.IsMasternodeOrDisconnectRequested(dmn->pdmnState->addr)) {
+        if (connman.IsMasternodeOrDisconnectRequested(dmn->pdmnState->netInfo.GetPrimary())) {
             WalletCJLogPrint(m_wallet, "CCoinJoinClientSession::StartNewQueue -- skipping connection, masternode=%s\n",
                              dmn->proTxHash.ToString());
             nTries++;
@@ -1215,7 +1218,7 @@ bool CCoinJoinClientSession::ProcessPendingDsaRequest(CConnman& connman)
 
     CService mn_addr;
     if (auto dmn = m_dmnman.GetListAtChainTip().GetMN(pendingDsaRequest.GetProTxHash())) {
-        mn_addr = Assert(dmn->pdmnState)->addr;
+        mn_addr = Assert(dmn->pdmnState)->netInfo.GetPrimary();
     } else {
         WalletCJLogPrint(m_wallet, "CCoinJoinClientSession::%s -- cannot find address to connect, masternode=%s\n", __func__,
             pendingDsaRequest.GetProTxHash().ToString());
@@ -1465,12 +1468,12 @@ bool CCoinJoinClientSession::MakeCollateralAmounts(const CompactTallyItem& tally
     if (!CCoinJoinClientOptions::IsEnabled()) return false;
 
     // Denominated input is always a single one, so we can check its amount directly and return early
-    if (!fTryDenominated && tallyItem.vecInputCoins.size() == 1 && CoinJoin::IsDenominatedAmount(tallyItem.nAmount)) {
+    if (!fTryDenominated && tallyItem.outpoints.size() == 1 && CoinJoin::IsDenominatedAmount(tallyItem.nAmount)) {
         return false;
     }
 
     // Skip single inputs that can be used as collaterals already
-    if (tallyItem.vecInputCoins.size() == 1 && CoinJoin::IsCollateralAmount(tallyItem.nAmount)) {
+    if (tallyItem.outpoints.size() == 1 && CoinJoin::IsCollateralAmount(tallyItem.nAmount)) {
         return false;
     }
 
@@ -1551,7 +1554,7 @@ bool CCoinJoinClientSession::CreateCollateralTransaction(CMutableTransaction& tx
     CCoinControl coin_control;
     coin_control.nCoinType = CoinType::ONLY_COINJOIN_COLLATERAL;
 
-    m_wallet->AvailableCoins(vCoins, &coin_control);
+    AvailableCoins(*m_wallet, vCoins, &coin_control);
 
     if (vCoins.empty()) {
         strReason = strprintf("%s requires a collateral transaction and could not locate an acceptable input!", gCoinJoinName);
@@ -1559,10 +1562,10 @@ bool CCoinJoinClientSession::CreateCollateralTransaction(CMutableTransaction& tx
     }
 
     const auto& output = vCoins.at(GetRand(vCoins.size()));
-    const CTxOut txout = output.tx->tx->vout[output.i];
+    const CTxOut txout = output.txout;
 
     txCollateral.vin.clear();
-    txCollateral.vin.emplace_back(output.tx->GetHash(), output.i);
+    txCollateral.vin.emplace_back(output.outpoint.hash, output.outpoint.n);
     txCollateral.vout.clear();
 
     // pay collateral charge in fees
@@ -1633,7 +1636,7 @@ bool CCoinJoinClientSession::CreateDenominated(CAmount nBalanceToDenominate, con
     if (!CCoinJoinClientOptions::IsEnabled()) return false;
 
     // denominated input is always a single one, so we can check its amount directly and return early
-    if (tallyItem.vecInputCoins.size() == 1 && CoinJoin::IsDenominatedAmount(tallyItem.nAmount)) {
+    if (tallyItem.outpoints.size() == 1 && CoinJoin::IsDenominatedAmount(tallyItem.nAmount)) {
         return false;
     }
 
@@ -1817,7 +1820,7 @@ void CCoinJoinClientSession::RelayIn(const CCoinJoinEntry& entry, CConnman& conn
 {
     if (!mixingMasternode) return;
 
-    connman.ForNode(mixingMasternode->pdmnState->addr, [&entry, &connman, this](CNode* pnode) {
+    connman.ForNode(mixingMasternode->pdmnState->netInfo.GetPrimary(), [&entry, &connman, this](CNode* pnode) {
         WalletCJLogPrint(m_wallet, "CCoinJoinClientSession::RelayIn -- found master, relaying message to %s\n",
                          pnode->addr.ToStringAddrPort());
         CNetMsgMaker msgMaker(pnode->GetCommonVersion());
@@ -1873,7 +1876,7 @@ void CCoinJoinClientSession::GetJsonInfo(UniValue& obj) const
         assert(mixingMasternode->pdmnState);
         obj.pushKV("protxhash", mixingMasternode->proTxHash.ToString());
         obj.pushKV("outpoint", mixingMasternode->collateralOutpoint.ToStringShort());
-        obj.pushKV("service", mixingMasternode->pdmnState->addr.ToStringAddrPort());
+        obj.pushKV("service", mixingMasternode->pdmnState->netInfo.GetPrimary().ToStringAddrPort());
     }
     obj.pushKV("denomination", ValueFromAmount(CoinJoin::DenominationToAmount(nSessionDenom)));
     obj.pushKV("state", GetStateString());

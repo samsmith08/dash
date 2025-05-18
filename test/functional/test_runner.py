@@ -126,6 +126,7 @@ BASE_SCRIPTS = [
     'feature_llmq_is_retroactive.py', # NOTE: needs dash_hash to pass
     'feature_llmq_chainlocks.py', # NOTE: needs dash_hash to pass
     'feature_llmq_simplepose.py', # NOTE: needs dash_hash to pass
+    'feature_llmq_simplepose.py --disable-spork23', # NOTE: needs dash_hash to pass
     'feature_dip3_deterministicmns.py --legacy-wallet', # NOTE: needs dash_hash to pass
     'feature_dip3_deterministicmns.py --descriptors', # NOTE: needs dash_hash to pass
     'feature_llmq_signing.py', # NOTE: needs dash_hash to pass
@@ -134,6 +135,7 @@ BASE_SCRIPTS = [
     'feature_llmq_evo.py', # NOTE: needs dash_hash to pass
     'feature_llmq_is_cl_conflicts.py', # NOTE: needs dash_hash to pass
     'feature_llmq_dkgerrors.py', # NOTE: needs dash_hash to pass
+    'feature_llmq_singlenode.py', # NOTE: needs dash_hash to pass
     'feature_dip4_coinbasemerkleroots.py', # NOTE: needs dash_hash to pass
     'feature_mnehf.py', # NOTE: needs dash_hash to pass
     'feature_governance.py --legacy-wallet',
@@ -205,6 +207,8 @@ BASE_SCRIPTS = [
     'rpc_signrawtransaction.py --descriptors',
     'rpc_rawtransaction.py --legacy-wallet',
     'rpc_rawtransaction.py --descriptors',
+    'wallet_transactiontime_rescan.py --descriptors',
+    'wallet_transactiontime_rescan.py --legacy-wallet',
     'p2p_addrv2_relay.py',
     'wallet_groups.py --legacy-wallet',
     'wallet_groups.py --descriptors',
@@ -369,6 +373,7 @@ BASE_SCRIPTS = [
     'feature_anchors.py',
     'feature_coinstatsindex.py',
     'wallet_orphanedreward.py',
+    'wallet_timelock.py',
     'p2p_node_network_limited.py --v1transport',
     'p2p_node_network_limited.py --v2transport',
     'p2p_permissions.py',

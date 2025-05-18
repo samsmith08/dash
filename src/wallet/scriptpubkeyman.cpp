@@ -219,7 +219,7 @@ bool LegacyScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master_key
         if (keyFail) {
             return false;
         }
-        if (!keyPass && !accept_no_keys && (m_hd_chain.IsNull() || (!m_hd_chain.IsNull() && !m_hd_chain.IsCrypted()))) {
+        if (!keyPass && !accept_no_keys && (m_hd_chain.IsNull() || !m_hd_chain.IsCrypted())) {
             return false;
         }
 
@@ -1823,6 +1823,12 @@ isminetype DescriptorScriptPubKeyMan::IsMine(const CScript& script) const
         return ISMINE_SPENDABLE;
     }
     return ISMINE_NO;
+}
+
+isminetype DescriptorScriptPubKeyMan::IsMine(const CTxDestination& dest) const
+{
+    CScript script = GetScriptForDestination(dest);
+    return IsMine(script);
 }
 
 bool DescriptorScriptPubKeyMan::CheckDecryptionKey(const CKeyingMaterial& master_key, bool accept_no_keys)

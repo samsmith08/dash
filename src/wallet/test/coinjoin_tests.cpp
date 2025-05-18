@@ -15,6 +15,7 @@
 #include <policy/settings.h>
 #include <validation.h>
 #include <wallet/context.h>
+#include <wallet/spend.h>
 #include <wallet/wallet.h>
 
 #include <boost/test/unit_test.hpp>
@@ -130,7 +131,7 @@ class CTransactionBuilderTestSetup : public TestChain100Setup
 {
 public:
     CTransactionBuilderTestSetup() :
-        wallet{std::make_unique<CWallet>(m_node.chain.get(), m_node.coinjoin_loader.get(), "", CreateMockWalletDatabase())}
+        wallet{std::make_unique<CWallet>(m_node.chain.get(), m_node.coinjoin_loader.get(), "", m_args, CreateMockWalletDatabase())}
     {
         context.args = &gArgs;
         context.chain = m_node.chain.get();
@@ -193,22 +194,22 @@ public:
         for (CAmount nAmount : vecAmounts) {
             CTransactionRef tx;
             FeeCalculation fee_calc_out;
-            BOOST_CHECK(wallet->CreateTransaction({{GetScriptForDestination(tallyItem.txdest), nAmount, false}}, tx, nFeeRet, nChangePosRet, strError, coinControl, fee_calc_out));
+            BOOST_CHECK(CreateTransaction(*wallet, {{GetScriptForDestination(tallyItem.txdest), nAmount, false}}, tx, nFeeRet, nChangePosRet, strError, coinControl, fee_calc_out));
             {
                 LOCK2(wallet->cs_wallet, cs_main);
                 wallet->CommitTransaction(tx, {}, {});
             }
             AddTxToChain(tx->GetHash());
-            for (size_t n = 0; n < tx->vout.size(); ++n) {
+            for (uint32_t n = 0; n < tx->vout.size(); ++n) {
                 if (nChangePosRet != -1 && int(n) == nChangePosRet) {
                     // Skip the change output to only return the requested coins
                     continue;
                 }
-                tallyItem.vecInputCoins.emplace_back(tx, n);
+                tallyItem.outpoints.emplace_back(COutPoint{tx->GetHash(), n});
                 tallyItem.nAmount += tx->vout[n].nValue;
             }
         }
-        assert(tallyItem.vecInputCoins.size() == vecAmounts.size());
+        assert(tallyItem.outpoints.size() == vecAmounts.size());
         reserveDest.KeepDestination();
         return tallyItem;
     }
